@@ -3,7 +3,7 @@ module github.com/lemmego/queue
 go 1.25.0
 
 require (
-	github.com/lemmego/api v0.1.0
+	github.com/lemmego/api v0.1.26
 	github.com/lemmego/tasker v0.1.0
 	github.com/spf13/cobra v1.8.1
 )
@@ -87,9 +87,4 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.46.1 // indirect
-)
-
-replace (
-	github.com/lemmego/api => ../api
-	github.com/lemmego/tasker => ../tasker
 )
