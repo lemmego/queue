@@ -17,11 +17,11 @@ import (
 	"github.com/lemmego/tasker/web"
 )
 
-type QueueProvider struct {
+type Provider struct {
 	Config *Config
 }
 
-func (p *QueueProvider) Provide(a app.App) error {
+func (p *Provider) Provide(a app.App) error {
 	cfg := DefaultConfig()
 	if p.Config != nil {
 		cfg = p.Config
@@ -85,7 +85,7 @@ func (p *QueueProvider) Provide(a app.App) error {
 	return nil
 }
 
-func (p *QueueProvider) AddCommands() []app.Command {
+func (p *Provider) AddCommands() []app.Command {
 	return []app.Command{
 		func(a app.App) *cobra.Command {
 			return cmd.WorkCommand(a)
@@ -93,7 +93,7 @@ func (p *QueueProvider) AddCommands() []app.Command {
 	}
 }
 
-func (p *QueueProvider) AddRoutes() app.RouteCallback {
+func (p *Provider) AddRoutes() app.RouteCallback {
 	return func(a app.App) {
 		srv := app.Get[*web.Server](a)
 		if srv == nil {
@@ -107,7 +107,7 @@ func (p *QueueProvider) AddRoutes() app.RouteCallback {
 	}
 }
 
-func (p *QueueProvider) AddPublishables() []*app.Publishable {
+func (p *Provider) AddPublishables() []*app.Publishable {
 	return []*app.Publishable{
 		{
 			FilePath: "internal/configs/tasker.go",
@@ -117,7 +117,7 @@ func (p *QueueProvider) AddPublishables() []*app.Publishable {
 	}
 }
 
-func (p *QueueProvider) Shutdown(ctx context.Context) error {
+func (p *Provider) Shutdown(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	_ = ctx
