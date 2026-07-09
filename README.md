@@ -11,7 +11,7 @@ import "github.com/lemmego/queue"
 
 func LoadProviders() []app.Provider {
     return []app.Provider{
-        &queue.QueueProvider{},  // auto-configures from app config
+        &queue.Provider{},  // auto-configures from app config
     }
 }
 ```
@@ -21,7 +21,7 @@ That's it. The provider auto-reads database credentials from your existing `conf
 ### With explicit configuration
 
 ```go
-&queue.QueueProvider{
+&queue.Provider{
     Config: &queue.Config{
         Driver:             "redis",
         RedisAddr:          ":6379",
