@@ -2,32 +2,67 @@ package queue
 
 import (
 	"context"
+	"errors"
 
 	"github.com/lemmego/tasker"
 )
 
+var ErrNotInitialized = errors.New("queue: provider is not initialized")
+
+func manager() (*tasker.Manager, error) {
+	mgr := tasker.Global()
+	if mgr == nil {
+		return nil, ErrNotInitialized
+	}
+	return mgr, nil
+}
+
 func Dispatch(ctx context.Context, job tasker.Job, opts ...tasker.DispatchOpt) (*tasker.JobRow, error) {
-	return tasker.Global().Dispatch(ctx, job, opts...)
+	mgr, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return mgr.Dispatch(ctx, job, opts...)
 }
 
 func DispatchBatch(ctx context.Context, jobs []tasker.Job, opts ...tasker.DispatchOpt) ([]*tasker.JobRow, error) {
-	return tasker.Global().DispatchBatch(ctx, jobs, opts...)
+	mgr, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return mgr.DispatchBatch(ctx, jobs, opts...)
 }
 
 func Chain(ctx context.Context, jobs []tasker.Job, opts ...tasker.DispatchOpt) ([]*tasker.JobRow, error) {
-	return tasker.Global().Chain(ctx, jobs, opts...)
+	mgr, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return mgr.Chain(ctx, jobs, opts...)
 }
 
 func Retry(ctx context.Context, id tasker.JobID) (*tasker.JobRow, error) {
-	return tasker.Global().Retry(ctx, id)
+	mgr, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return mgr.Retry(ctx, id)
 }
 
 func Cancel(ctx context.Context, id tasker.JobID) (*tasker.JobRow, error) {
-	return tasker.Global().Cancel(ctx, id)
+	mgr, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return mgr.Cancel(ctx, id)
 }
 
 func GetJob(ctx context.Context, id tasker.JobID) (*tasker.JobRow, error) {
-	return tasker.Global().GetJob(ctx, id)
+	mgr, err := manager()
+	if err != nil {
+		return nil, err
+	}
+	return mgr.GetJob(ctx, id)
 }
 
 func RegisterJob(name string, factory tasker.JobFactory) {
