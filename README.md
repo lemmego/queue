@@ -46,11 +46,20 @@ That's it. The provider auto-reads database credentials from your existing `conf
 
 ```env
 TASKER_ROUTE_PREFIX=/jobs
+TASKER_DRIVER=sql
+TASKER_DSN=
+TASKER_SQL_DRIVER=
 TASKER_TABLE_PREFIX=myapp_
+TASKER_MAX_OPEN_CONNS=25
+TASKER_MAX_IDLE_CONNS=10
+TASKER_CONN_MAX_LIFETIME_SEC=0
 TASKER_QUEUE=default
 TASKER_MAX_ATTEMPTS=3
+TASKER_WORKERS=3
 TASKER_HEARTBEAT_SEC=5
+TASKER_REQUEUE_INTERVAL_SEC=30
 TASKER_REQUEUE_SEC=60
+TASKER_PRUNE_INTERVAL_HOURS=24
 TASKER_PRUNE_HOURS=168
 TASKER_AUTOSCALE=false
 ```
@@ -76,8 +85,10 @@ Skips SQL config entirely — use `RedisAddr`, `RedisPass`, `RedisDB` fields.
 
 ### HTTP only (skipped in console mode)
 
-- **Supervisor** — worker pool manager (needed by `tasker:work`)
+- **Supervisor** — registered for dashboard controls, but not automatically started
 - **Web server** — dashboard UI + API at `RoutePrefix`
+
+HTTP startup does not implicitly run workers because the application service container has no start lifecycle. Run `tasker:work` as a separately managed process. The provider stops any active queue resources and closes its database or Redis connection during application shutdown.
 
 ## Commands
 
