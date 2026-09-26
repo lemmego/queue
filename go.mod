@@ -5,7 +5,7 @@ go 1.27
 require (
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/go-sql-driver/mysql v1.9.3
-	github.com/lemmego/api v0.1.26
+	github.com/lemmego/api v0.1.34
 	github.com/lemmego/tasker v0.1.0
 	github.com/lib/pq v1.10.9
 	github.com/spf13/cobra v1.8.1
@@ -51,7 +51,7 @@ require (
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lemmego/fsys v0.1.0 // indirect
-	github.com/lemmego/migration v0.1.14 // indirect
+	github.com/lemmego/migration v0.1.19 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/planetscale/vtprotobuf v0.6.1-0.20240319094008-0393e58bdf10 // indirect
