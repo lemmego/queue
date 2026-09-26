@@ -159,7 +159,10 @@ func (p *Provider) AddPublishables() []*app.Publishable {
 		{
 			FilePath: "internal/configs/tasker.go",
 			Content:  []byte(ConfigStub),
-			Tag:      "config",
+			// Namespaced, because --tags is a real selector: a bare
+			// "config" collides with every other package that publishes
+			// one, so asking for this module's meant getting all of them.
+			Tag: TagConfig,
 		},
 	}
 }
@@ -300,3 +303,7 @@ func redactDSN(dsn string) string {
 	}
 	return dsn
 }
+
+// TagConfig is what `lemmego publish --tags` selects this module's
+// configuration on.
+const TagConfig = "queue-config"
