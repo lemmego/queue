@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,6 +16,7 @@ import (
 
 	"github.com/lemmego/api/app"
 	"github.com/lemmego/api/config"
+	"github.com/lemmego/api/db"
 	"github.com/lemmego/tasker"
 	"github.com/lemmego/tasker/cmd"
 	"github.com/lemmego/tasker/driver/redisdriver"
@@ -48,10 +51,22 @@ func (p *Provider) Provide(a app.App) error {
 		return err
 	}
 
-	d, err := createDriver(cfg)
+	// Borrow the application's connection when there is one and no DSN was
+	// configured to point somewhere else. Before this, the queue re-derived
+	// a DSN from the same sql block the ORM reads, with its own precedence
+	// rules — and the two drifted: the ORM ignored a connection's url key
+	// while the queue preferred it, so a scaffolded project ran its queue
+	// against an in-memory database and lost every job on restart.
+	//
+	// Nothing is registered when the project has no database, and that is
+	// fine: the derive path below still handles a queue with its own DSN.
+	conn, _ := db.Resolve(a)
+
+	d, err := createDriver(cfg, conn)
 	if err != nil {
 		return fmt.Errorf("tasker: failed to create driver: %w", err)
 	}
+	logDriverSource(cfg, conn)
 
 	if sd, ok := d.(interface{ Migrate(context.Context) error }); ok {
 		if err := sd.Migrate(context.Background()); err != nil {
@@ -189,17 +204,24 @@ func newWebServer(mgr *tasker.Manager, sup *supervisor.Supervisor, prefix string
 	return web.NewWithPrefix(mgr, sup, prefix)
 }
 
-func createDriver(cfg *Config) (tasker.Driver, error) {
+func createDriver(cfg *Config, conn db.Connection) (tasker.Driver, error) {
 	switch cfg.Driver {
 	case "sql", "postgres", "mysql", "sqlite", "sqlite3":
-		return sqldriver.NewDriver(sqldriver.Config{
+		settings := sqldriver.Config{
 			DSN:             cfg.DSN,
 			DriverName:      cfg.DriverName,
 			MaxOpenConns:    cfg.MaxOpenConns,
 			MaxIdleConns:    cfg.MaxIdleConns,
 			ConnMaxLifetime: cfg.ConnMaxLifetime,
 			TablePrefix:     cfg.TablePrefix,
-		})
+		}
+		if borrow, err := shouldBorrow(cfg, conn); err != nil {
+			return nil, err
+		} else if borrow {
+			settings.DB = conn.SQLDB()
+			settings.Dialect = string(conn.Dialect())
+		}
+		return sqldriver.NewDriver(settings)
 	case "redis":
 		return redisdriver.NewDriver(redisdriver.Config{
 			Addr:      cfg.RedisAddr,
@@ -211,4 +233,70 @@ func createDriver(cfg *Config) (tasker.Driver, error) {
 	default:
 		return nil, fmt.Errorf("unsupported tasker driver: %s", cfg.Driver)
 	}
+}
+
+// shouldBorrow reports whether the queue should run against the application's
+// connection rather than opening its own.
+//
+// An explicitly configured DSN always wins: that is how an application says
+// "keep the queue in its own database", which is a legitimate choice for
+// isolating job traffic from request traffic.
+//
+// A dialect disagreement is refused rather than resolved. If the queue is
+// configured for postgres and the application opened mysql, one of the two is
+// wrong, and guessing would generate SQL the database rejects at the first
+// job rather than at boot.
+func shouldBorrow(cfg *Config, conn db.Connection) (bool, error) {
+	if conn == nil || cfg.dsnExplicit {
+		return false, nil
+	}
+	if conn.SQLDB() == nil || conn.Dialect() == db.DialectUnknown {
+		return false, nil
+	}
+
+	requested := cfg.DriverName
+	if cfg.Driver != "" && cfg.Driver != "sql" {
+		requested = cfg.Driver
+	}
+	if requested == "" {
+		return true, nil
+	}
+	wanted, known := db.ParseDialect(requested)
+	if !known {
+		return false, fmt.Errorf("tasker: unsupported driver %q", requested)
+	}
+	if wanted != conn.Dialect() {
+		return false, fmt.Errorf(
+			"tasker: configured for %s but the application's database is %s; "+
+				"set TASKER_DSN to give the queue its own database, or drop tasker.driver to share the application's",
+			wanted, conn.Dialect())
+	}
+	return true, nil
+}
+
+// logDriverSource says which database the queue ended up on. Sharing the
+// application's connection is silent and invisible otherwise, and the failure
+// this replaces — a queue quietly running somewhere else — was invisible
+// precisely because nothing ever said.
+func logDriverSource(cfg *Config, conn db.Connection) {
+	if cfg.Driver == "redis" {
+		slog.Info("tasker: using redis", "addr", cfg.RedisAddr)
+		return
+	}
+	if borrow, err := shouldBorrow(cfg, conn); err == nil && borrow {
+		slog.Info("tasker: sharing the application's database connection",
+			"connection", conn.Name(), "dialect", conn.Dialect())
+		return
+	}
+	slog.Info("tasker: opening its own database connection",
+		"driver", cfg.DriverName, "dsn", redactDSN(cfg.DSN))
+}
+
+// redactDSN keeps credentials out of the log while leaving enough to tell one
+// database from another, which is the whole point of logging it.
+func redactDSN(dsn string) string {
+	if at := strings.LastIndex(dsn, "@"); at >= 0 {
+		return "***@" + dsn[at+1:]
+	}
+	return dsn
 }

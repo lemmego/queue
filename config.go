@@ -42,6 +42,10 @@ type Config struct {
 	RequeueTimeout    int
 	PruneInterval     int
 	PruneAfterHours   int
+
+	// dsnExplicit records that DSN was configured rather than derived from
+	// the application's sql block. Set by autoFillDatabase.
+	dsnExplicit bool
 }
 
 func DefaultConfig() *Config {
@@ -246,6 +250,11 @@ func resolveConfig(explicit *Config, taskerConfig, sqlConfig config.M, sharedRed
 func (cfg *Config) autoFillDatabase(sqlConfig config.M) error {
 	cfg.Driver = strings.ToLower(strings.TrimSpace(cfg.Driver))
 	if cfg.Driver == "redis" || cfg.DSN != "" {
+		// A DSN that is already set was given by the application, not
+		// derived here. That distinction is what lets the provider tell
+		// "run against this specific database" from "run wherever the
+		// application runs", and only the latter borrows its pool.
+		cfg.dsnExplicit = cfg.DSN != ""
 		return nil
 	}
 
