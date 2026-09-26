@@ -1,6 +1,6 @@
 module github.com/lemmego/queue
 
-go 1.25.0
+go 1.27
 
 require (
 	github.com/glebarez/go-sqlite v1.22.0

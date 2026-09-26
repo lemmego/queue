@@ -37,7 +37,13 @@ type Provider struct {
 func (p *Provider) Provide(a app.App) error {
 	taskerCfg, _ := a.Config().Get("tasker").(config.M)
 	appCfg, _ := a.Config().Get("sql").(config.M)
-	cfg, err := resolveConfig(p.Config, taskerCfg, appCfg)
+
+	// An application usually has one Redis. Reading the shared connection
+	// block means a project that configured Redis once does not have to
+	// repeat the address under tasker, while tasker.redis_addr still wins.
+	sharedRedis, _ := a.Config().Get("keyvalue.connections.redis").(config.M)
+
+	cfg, err := resolveConfig(p.Config, taskerCfg, appCfg, sharedRedis)
 	if err != nil {
 		return err
 	}

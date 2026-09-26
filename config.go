@@ -2,6 +2,7 @@ package queue
 
 import (
 	"fmt"
+	"log/slog"
 	"net"
 	"net/url"
 	"path"
@@ -215,8 +216,13 @@ func (cfg *Config) applyExplicit(explicit *Config) {
 	}
 }
 
-func resolveConfig(explicit *Config, taskerConfig, sqlConfig config.M) (*Config, error) {
+func resolveConfig(explicit *Config, taskerConfig, sqlConfig config.M, sharedRedis ...config.M) (*Config, error) {
 	cfg := DefaultConfig()
+
+	// Weaker than anything written under tasker, which is applied below.
+	for _, shared := range sharedRedis {
+		cfg.applySharedRedis(shared)
+	}
 	// Apply once to select the requested connection, then again so queue-specific
 	// settings retain priority over inherited database pool settings.
 	cfg.ApplyOverrides(taskerConfig)
@@ -277,6 +283,7 @@ func (cfg *Config) autoFillDatabase(sqlConfig config.M) error {
 	cfg.DriverName = driverName
 	if rawURL := connection.String("url", ""); rawURL != "" {
 		cfg.DSN = rawURL
+		warnIfEphemeral(cfg.DSN)
 	} else {
 		switch driverName {
 		case "sqlite":
@@ -438,4 +445,41 @@ func (cfg *Config) normalizeAndValidate() error {
 		return fmt.Errorf("tasker: max_idle_conns cannot exceed max_open_conns")
 	}
 	return nil
+}
+
+// warnIfEphemeral reports a SQL DSN that does not outlive the process.
+//
+// A queue on an in-memory database accepts jobs and loses every one of them on
+// restart, silently — the tables are recreated empty and nothing reports that
+// anything was dropped. It is a legitimate choice in tests, so this warns
+// rather than refusing, but it should never be true of a running application.
+func warnIfEphemeral(dsn string) {
+	lowered := strings.ToLower(dsn)
+	if !strings.Contains(lowered, "mode=memory") && !strings.Contains(lowered, ":memory:") {
+		return
+	}
+	slog.Warn("tasker: the configured database is in memory, so queued jobs will not survive a restart",
+		"dsn", dsn)
+}
+
+// applySharedRedis takes the address and password from the application's shared
+// Redis connection, so one configured Redis serves the queue too.
+//
+// It runs before the tasker settings, so tasker.redis_addr still overrides it.
+// The shared block spells the address as separate host and port, matching what
+// the session provider reads.
+func (c *Config) applySharedRedis(shared config.M) {
+	if shared == nil {
+		return
+	}
+
+	host := shared.String("host")
+	if host == "" {
+		return
+	}
+	c.RedisAddr = net.JoinHostPort(host, strconv.Itoa(shared.Int("port", 6379)))
+
+	if password := shared.String("password"); password != "" {
+		c.RedisPass = password
+	}
 }
