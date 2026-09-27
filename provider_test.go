@@ -120,3 +120,29 @@ func TestDashboardGuardPassesOnWhatThePredicateEstablished(t *testing.T) {
 		t.Fatalf("downstream saw %v, want the value the predicate set", downstream)
 	}
 }
+
+// The guard runs the predicate and nothing else. It deliberately does not
+// authenticate on the project's behalf: queue does not depend on auth, and a
+// rule that has nothing to do with users — a shared secret, an IP allowlist —
+// must not pay for a session lookup.
+//
+// The consequence is the one thing about this field that is easy to get
+// wrong, so it is pinned here: whatever the predicate does not establish
+// itself is simply absent, because no router middleware runs for a raw
+// mounted handler.
+func TestDashboardGuardDoesNotAuthenticateForYou(t *testing.T) {
+	var sawUser bool
+	provider := &Provider{DashboardAuth: func(c app.Context) bool {
+		sawUser = c.Get("auth:user") != nil
+		return true
+	}}
+
+	handler := provider.dashboardGuard(nil)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	request := httptest.NewRequest(http.MethodGet, "/tasker/", nil)
+	request.AddCookie(&http.Cookie{Name: "lemmego_session", Value: "whatever"})
+	handler.ServeHTTP(httptest.NewRecorder(), request)
+
+	if sawUser {
+		t.Fatal("the guard populated a user; the predicate must call auth.Check itself")
+	}
+}

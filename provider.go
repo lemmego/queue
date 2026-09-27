@@ -42,15 +42,23 @@ type Provider struct {
 	// the application's own user type:
 	//
 	//	DashboardAuth: func(c app.Context) bool {
+	//	    if err := auth.Check(c); err != nil {
+	//	        return false
+	//	    }
 	//	    user, ok := auth.UserAs[*models.User](c)
 	//	    return ok && slices.Contains(admins, user.Email)
 	//	},
 	//
-	// Authentication has already run by the time this is called, so a
-	// session cookie or a bearer token both resolve the same user. Nothing
-	// stops a check that ignores users entirely — a shared secret header,
-	// or an IP allowlist — which is why this is a predicate over the
-	// request and not over a user interface.
+	// Call auth.Check yourself, and call it first. The dashboard is mounted
+	// as a raw http.Handler, so none of the router's middleware runs for it
+	// and nothing has looked at the request's cookie by the time this is
+	// called. Omit it and the user is always absent, so the answer is always
+	// no — an honest failure, but a puzzling one.
+	//
+	// Check resolves a session cookie and a bearer token alike, so one rule
+	// covers both. Nothing stops a check that ignores users entirely — a
+	// shared secret header, an IP allowlist — which is why this is a
+	// predicate over the request and not over a user interface.
 	DashboardAuth func(c app.Context) bool
 
 	mu           sync.RWMutex
