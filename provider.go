@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
@@ -27,6 +28,30 @@ import (
 
 type Provider struct {
 	Config *Config
+
+	// DashboardAuth decides whether a request may use the management
+	// dashboard. Return true to let it through, false to answer 401.
+	//
+	// The dashboard can retry, cancel and delete jobs, so it stays closed
+	// until this is set: leaving it nil is not "no authentication", it is
+	// "no access". That is deliberate — the failure mode of the opposite
+	// default is a public button that clears somebody's queue.
+	//
+	// It takes an app.Context rather than a user, because "may this person
+	// use it" is a question about the request, and the answer usually needs
+	// the application's own user type:
+	//
+	//	DashboardAuth: func(c app.Context) bool {
+	//	    user, ok := auth.UserAs[*models.User](c)
+	//	    return ok && slices.Contains(admins, user.Email)
+	//	},
+	//
+	// Authentication has already run by the time this is called, so a
+	// session cookie or a bearer token both resolve the same user. Nothing
+	// stops a check that ignores users entirely — a shared secret header,
+	// or an IP allowlist — which is why this is a predicate over the
+	// request and not over a user interface.
+	DashboardAuth func(c app.Context) bool
 
 	mu           sync.RWMutex
 	resolved     *Config
@@ -120,6 +145,15 @@ func (p *Provider) Provide(a app.App) error {
 		a.AddService(sup)
 
 		srv := newWebServer(mgr, sup, cfg.RoutePrefix)
+		if p.DashboardAuth != nil {
+			srv.UseAuth(p.dashboardGuard(a))
+			// The dashboard posts from a browser, so state-changing
+			// requests need a token as well as a session.
+			srv.UseCSRF()
+		} else {
+			slog.Warn("queue: the tasker dashboard is mounted but closed; " +
+				"set queue.Provider.DashboardAuth to open it")
+		}
 		a.AddService(srv)
 		p.mu.Lock()
 		p.supervisor = sup
@@ -205,6 +239,31 @@ func routePattern(prefix string) string {
 
 func newWebServer(mgr *tasker.Manager, sup *supervisor.Supervisor, prefix string) *web.Server {
 	return web.NewWithPrefix(mgr, sup, prefix)
+}
+
+// dashboardGuard adapts DashboardAuth to the middleware tasker expects.
+//
+// The dashboard is a plain http.Handler mounted on the router, so there is no
+// app.Context in scope and no way to ask auth anything. app.NewContext builds
+// one around the raw request, which is what lets a project write its rule in
+// terms of its own user type.
+//
+// The rebound request is what goes downstream: Set writes onto the request's
+// context, so anything the predicate resolved — the loaded user, most of all
+// — would be dropped if the original were passed on instead.
+func (p *Provider) dashboardGuard(a app.App) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			c := app.NewContext(a, w, r)
+			if !p.DashboardAuth(c) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+				return
+			}
+			next.ServeHTTP(w, c.Request())
+		})
+	}
 }
 
 func createDriver(cfg *Config, conn db.Connection) (tasker.Driver, error) {
