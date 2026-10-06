@@ -22,6 +22,7 @@ import (
 	"github.com/lemmego/tasker/cmd"
 	"github.com/lemmego/tasker/driver/redisdriver"
 	"github.com/lemmego/tasker/driver/sqldriver"
+	"github.com/lemmego/tasker/scheduler"
 	"github.com/lemmego/tasker/supervisor"
 	"github.com/lemmego/tasker/web"
 )
@@ -61,10 +62,29 @@ type Provider struct {
 	// predicate over the request and not over a user interface.
 	DashboardAuth func(c app.Context) bool
 
+	// Schedule returns the jobs this application runs on a timer.
+	//
+	// Registering them is all this does. Nothing is started, because a
+	// scheduler started wherever it was constructed would run in every web
+	// process and every worker, and an hourly job would fire once per
+	// instance — invisibly, from inside any one of them. Start it with
+	// `lemmego run tasker:schedule`, as exactly one process.
+	//
+	//	Schedule: func(a app.App) []scheduler.ScheduledJob {
+	//	    return []scheduler.ScheduledJob{
+	//	        {ID: "weekly-rollup", Schedule: "5 0 * * 1", Job: &jobs.RollWeek{}},
+	//	    }
+	//	}
+	//
+	// A malformed cron expression fails startup rather than producing a job
+	// that never runs.
+	Schedule func(a app.App) []scheduler.ScheduledJob
+
 	mu           sync.RWMutex
 	resolved     *Config
 	manager      *tasker.Manager
 	supervisor   *supervisor.Supervisor
+	scheduler    *scheduler.Scheduler
 	driver       tasker.Driver
 	shutdownOnce sync.Once
 	shutdownErr  error
@@ -168,6 +188,16 @@ func (p *Provider) Provide(a app.App) error {
 		p.mu.Unlock()
 	}
 
+	// Built in every process, console included: a command that inspects or runs
+	// the schedule needs it registered, and building it dispatches nothing.
+	sched, err := p.buildScheduler(a)
+	if err != nil {
+		return fmt.Errorf("queue: %w", err)
+	}
+	if sched != nil {
+		a.AddService(sched)
+	}
+
 	return nil
 }
 
@@ -176,6 +206,7 @@ func (p *Provider) AddCommands() []app.Command {
 		func(a app.App) *cobra.Command {
 			return cmd.WorkCommand(a)
 		},
+		ScheduleCommand,
 	}
 }
 
