@@ -7,7 +7,6 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/lemmego/api v0.6.3
 	github.com/lemmego/tasker v0.1.6
-	github.com/lib/pq v1.10.9
 	github.com/spf13/cobra v1.8.1
 )
 
@@ -25,6 +24,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/lemmego/migration v0.2.0 // indirect
+	github.com/lib/pq v1.10.9 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
