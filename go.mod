@@ -6,7 +6,7 @@ require (
 	github.com/glebarez/go-sqlite v1.22.0
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/lemmego/api v0.6.3
-	github.com/lemmego/tasker v0.1.6
+	github.com/lemmego/tasker v0.3.0
 	github.com/spf13/cobra v1.8.1
 )
 
