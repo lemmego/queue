@@ -153,3 +153,25 @@ func TestResolveConfigValidation(t *testing.T) {
 		})
 	}
 }
+
+// A libSQL connection must reach the queue as sqlite, or validateConfig
+// rejects the name before shouldBorrow is ever consulted.
+//
+// This is what panicked a scaffolded libsql project at boot with
+// `tasker: unsupported SQL driver "libsql"`. The queue never needed its own
+// libsql support: shouldBorrow resolves both the requested driver and the
+// application's connection through db.ParseDialect, which maps libsql onto
+// SQLite, so the queue shares the application's handle. It only needed to
+// stop refusing the name.
+func TestLibSQLIsCanonicalisedToSQLite(t *testing.T) {
+	for _, spelling := range []string{"libsql", "LibSQL", "  libsql  "} {
+		if got := canonicalSQLDriver(spelling); got != "sqlite" {
+			t.Errorf("canonicalSQLDriver(%q) = %q, want sqlite", spelling, got)
+		}
+	}
+	// The control: an unknown name is still passed through unchanged, so
+	// validateConfig can name it.
+	if got := canonicalSQLDriver("nonsense"); got != "nonsense" {
+		t.Errorf("canonicalSQLDriver(nonsense) = %q, want it handed through", got)
+	}
+}

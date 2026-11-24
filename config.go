@@ -376,7 +376,16 @@ func mysqlDSN(connection config.M) string {
 
 func canonicalSQLDriver(driver string) string {
 	switch strings.ToLower(strings.TrimSpace(driver)) {
-	case "sqlite", "sqlite3", "modernc.org/sqlite":
+	case "sqlite", "sqlite3", "modernc.org/sqlite", "libsql":
+		// libsql included because libSQL is a fork of SQLite: the queue's DDL
+		// and its SQL are SQLite's, and shouldBorrow resolves both this and
+		// the application's connection through db.ParseDialect, which maps
+		// libsql onto SQLite too -- so the queue shares the application's
+		// handle rather than opening one of its own.
+		//
+		// Without it, validateConfig rejected the name before borrowing was
+		// ever considered, and a scaffolded libsql project panicked at boot
+		// with `tasker: unsupported SQL driver "libsql"`.
 		return "sqlite"
 	case "postgres", "postgresql", "pgsql", "pgx":
 		return "postgres"
